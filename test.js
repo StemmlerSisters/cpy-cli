@@ -218,3 +218,29 @@ test('cwd with directory pattern and relative destination outside cwd', async t 
 	t.is(read(t.context.tmp, 'dist/a.file'), 'content a');
 	t.is(read(t.context.tmp, 'dist/another.file'), 'content b');
 });
+
+test('dotfiles with extension pattern and --dot flag', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'dest'));
+	fs.writeFileSync(path.join(t.context.tmp, '.meshrc.yml'), 'meshrc');
+	fs.writeFileSync(path.join(t.context.tmp, 'config.yml'), 'config');
+	fs.writeFileSync(path.join(t.context.tmp, 'test.yaml'), 'test');
+
+	await execa('./cli.js', ['*.{yml,yaml}', path.join(t.context.tmp, 'dest'), '--cwd', t.context.tmp, '--dot']);
+
+	t.is(read(t.context.tmp, 'dest/.meshrc.yml'), 'meshrc');
+	t.is(read(t.context.tmp, 'dest/config.yml'), 'config');
+	t.is(read(t.context.tmp, 'dest/test.yaml'), 'test');
+});
+
+test('single file copy to ancestor directory avoids duplication', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'prisma'));
+	fs.mkdirSync(path.join(t.context.tmp, 'prisma', 'parts'));
+	fs.writeFileSync(path.join(t.context.tmp, 'prisma/parts/schema.prisma'), 'schema');
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'prisma/parts/schema.prisma'), path.join(t.context.tmp, 'prisma')]);
+
+	t.is(read(t.context.tmp, 'prisma/schema.prisma'), 'schema');
+	t.false(pathExistsSync(path.join(t.context.tmp, 'prisma/prisma/parts/schema.prisma')));
+});
