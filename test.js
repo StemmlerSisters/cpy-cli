@@ -186,3 +186,35 @@ test('multiple source files', async t => {
 	t.is(read(t.context.tmp, 'dest/a.txt'), 'A');
 	t.is(read(t.context.tmp, 'dest/b.txt'), 'B');
 });
+
+test('cwd with glob pattern and negation, destination outside cwd', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'src'));
+	fs.mkdirSync(path.join(t.context.tmp, 'src', 'Button'));
+	fs.mkdirSync(path.join(t.context.tmp, 'src', 'Checkbox'));
+
+	fs.writeFileSync(path.join(t.context.tmp, 'src/Button/Button.scss'), 'button styles');
+	fs.writeFileSync(path.join(t.context.tmp, 'src/Button/Button.stories.scss'), 'button story styles');
+	fs.writeFileSync(path.join(t.context.tmp, 'src/Checkbox/Checkbox.scss'), 'checkbox styles');
+
+	await execa('./cli.js', ['**/*.scss', '!**/*.stories.scss', '../lib', '--cwd', path.join(t.context.tmp, 'src')]);
+
+	t.is(read(t.context.tmp, 'lib/Button/Button.scss'), 'button styles');
+	t.is(read(t.context.tmp, 'lib/Checkbox/Checkbox.scss'), 'checkbox styles');
+	t.false(pathExistsSync(path.join(t.context.tmp, 'lib/Button/Button.stories.scss')));
+});
+
+test('cwd with directory pattern and relative destination outside cwd', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'src'));
+	fs.mkdirSync(path.join(t.context.tmp, 'src', 'subdirectory'));
+
+	fs.writeFileSync(path.join(t.context.tmp, 'src/a.file'), 'content a in src');
+	fs.writeFileSync(path.join(t.context.tmp, 'src/subdirectory/a.file'), 'content a');
+	fs.writeFileSync(path.join(t.context.tmp, 'src/subdirectory/another.file'), 'content b');
+
+	await execa('./cli.js', ['.', '../../dist', '--cwd', path.join(t.context.tmp, 'src/subdirectory')]);
+
+	t.is(read(t.context.tmp, 'dist/a.file'), 'content a');
+	t.is(read(t.context.tmp, 'dist/another.file'), 'content b');
+});
