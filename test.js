@@ -43,6 +43,18 @@ test('path structure', async t => {
 	);
 });
 
+test('base option aligns explicit paths with globs', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'src'));
+	fs.writeFileSync(path.join(t.context.tmp, 'src/README.md'), 'readme');
+	fs.writeFileSync(path.join(t.context.tmp, 'src/hello-world.js'), 'console.log("hello");');
+
+	await execa('./cli.js', ['src/*.md', 'src/hello-world.js', 'dist', '--cwd', t.context.tmp, '--base', 'pattern']);
+
+	t.is(read(t.context.tmp, 'src/README.md'), read(t.context.tmp, 'dist/README.md'));
+	t.is(read(t.context.tmp, 'src/hello-world.js'), read(t.context.tmp, 'dist/hello-world.js'));
+});
+
 test('rename filenames but not filepaths', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'dest'));

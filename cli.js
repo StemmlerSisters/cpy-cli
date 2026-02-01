@@ -11,6 +11,7 @@ const cli = meow(`
 	Options
 	  --no-overwrite       Don't overwrite the destination
 	  --cwd=<dir>          Working directory for files
+	  --base=<mode>        Base mode for destination paths: cwd or pattern
 	  --rename=<filename>  Rename all <source> filenames to <filename>. Supports string templates.
 	  --dot                Allow patterns to match entries that begin with a period (.)
 	  --flat               Flatten directory structure. All copied files will be put in the same directory.
@@ -37,6 +38,9 @@ const cli = meow(`
 		cwd: {
 			type: 'string',
 			default: process.cwd(),
+		},
+		base: {
+			type: 'string',
 		},
 		rename: {
 			type: 'string',
@@ -70,6 +74,7 @@ try {
 
 	await cpy(cli.input, cli.input.pop(), {
 		cwd: cli.flags.cwd,
+		base: cli.flags.base,
 		rename: cli.flags.rename,
 		overwrite: cli.flags.overwrite,
 		dot: cli.flags.dot,
