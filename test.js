@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import process from 'node:process';
 import test from 'ava';
 import tempfile from 'tempfile';
 import {execa} from 'execa';
@@ -15,6 +16,13 @@ test('missing file operands', async t => {
 	await t.throwsAsync(execa('./cli.js'), {message: /`source` and `destination` required/});
 });
 
+test('missing destination operand', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, 'source.txt'), 'hello');
+
+	await t.throwsAsync(execa('./cli.js', [path.join(t.context.tmp, 'source.txt')]), {message: /`source` and `destination` required/});
+});
+
 test('source file does not exist', async t => {
 	await t.throwsAsync(execa('./cli.js', [path.join(t.context.tmp, 'nonexistentfile'), t.context.tmp]), {message: /nonexistentfile/});
 });
@@ -22,6 +30,7 @@ test('source file does not exist', async t => {
 test('cwd', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'cwd'));
+	fs.mkdirSync(path.join(t.context.tmp, 'cwd', 'dest'));
 	fs.writeFileSync(path.join(t.context.tmp, 'cwd/hello.js'), 'console.log("hello");');
 
 	await execa('./cli.js', ['hello.js', 'dest', '--cwd', path.join(t.context.tmp, 'cwd')]);
@@ -255,6 +264,90 @@ test('dry run lists files without copying', async t => {
 	t.regex(stdout, /hello\.js/);
 	t.true(stdout.includes('→'));
 	t.false(pathExistsSync(path.join(t.context.tmp, 'dest/hello.js')));
+});
+
+test('single file to file copy', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, 'source.txt'), 'hello');
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'source.txt'), path.join(t.context.tmp, 'target.txt')]);
+
+	t.is(read(t.context.tmp, 'target.txt'), 'hello');
+});
+
+test('single file to file copy overwrites existing file', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, 'source.txt'), 'new');
+	fs.writeFileSync(path.join(t.context.tmp, 'target.txt'), 'old');
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'source.txt'), path.join(t.context.tmp, 'target.txt')]);
+
+	t.is(read(t.context.tmp, 'target.txt'), 'new');
+});
+
+test('single file to file copy with Windows path separators', async t => {
+	if (process.platform !== 'win32') {
+		t.pass();
+		return;
+	}
+
+	fs.mkdirSync(t.context.tmp);
+	const sourcePath = path.join(t.context.tmp, 'source.txt');
+	fs.writeFileSync(sourcePath, 'hello');
+
+	const destinationPath = path.join(t.context.tmp, 'target.txt');
+	const windowsSourcePath = path.win32.normalize(sourcePath);
+	const windowsDestinationPath = path.win32.normalize(destinationPath);
+
+	await execa('./cli.js', [windowsSourcePath, windowsDestinationPath]);
+
+	t.is(read(t.context.tmp, 'target.txt'), 'hello');
+	t.false(fs.statSync(destinationPath).isDirectory());
+});
+
+test('extglob patterns are treated as globs', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, 'alpha.txt'), 'alpha');
+	fs.writeFileSync(path.join(t.context.tmp, 'beta.txt'), 'beta');
+
+	const destination = path.join(t.context.tmp, 'dest.txt');
+
+	await execa('./cli.js', ['@(alpha|beta).txt', destination, '--cwd', t.context.tmp]);
+
+	t.true(fs.statSync(destination).isDirectory());
+	t.is(read(t.context.tmp, 'dest.txt/alpha.txt'), 'alpha');
+	t.is(read(t.context.tmp, 'dest.txt/beta.txt'), 'beta');
+});
+
+test('single file to file copy with dotfiles', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, '.env.development'), 'DEV=true');
+
+	await execa('./cli.js', [path.join(t.context.tmp, '.env.development'), path.join(t.context.tmp, '.env'), '--dot']);
+
+	t.is(read(t.context.tmp, '.env'), 'DEV=true');
+});
+
+test('single file to directory when destination is existing directory', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'dest'));
+	fs.writeFileSync(path.join(t.context.tmp, 'source.txt'), 'hello');
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'source.txt'), path.join(t.context.tmp, 'dest')]);
+
+	t.is(read(t.context.tmp, 'dest/source.txt'), 'hello');
+});
+
+test('single file to directory when destination has trailing separator and does not exist', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.writeFileSync(path.join(t.context.tmp, 'source.txt'), 'hello');
+
+	const destination = path.join(t.context.tmp, 'newdir') + path.sep;
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'source.txt'), destination]);
+
+	t.true(fs.statSync(path.join(t.context.tmp, 'newdir')).isDirectory());
+	t.is(read(t.context.tmp, 'newdir/source.txt'), 'hello');
 });
 
 test('single file copy to ancestor directory avoids duplication', async t => {

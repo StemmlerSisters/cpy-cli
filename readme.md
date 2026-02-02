@@ -34,12 +34,17 @@ $ cpy --help
 
   <source> can contain globs if quoted
 
+  If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
+
   Examples
     Copy all .png files in src folder into dist except src/goat.png
     $ cpy 'src/*.png' '!src/goat.png' dist
 
     Copy all files inside src folder into dist and preserve path structure
     $ cpy . '../dist/' --cwd=src
+
+    Copy a single file to a specific filename
+    $ cpy .env.development .env
 
     Copy all .png files in the src folder to dist and prefix the image filenames
     $ cpy 'src/*.png' dist --cwd=src --rename=hi-{{basename}}

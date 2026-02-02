@@ -1,9 +1,19 @@
 #!/usr/bin/env node
 import path from 'node:path';
+import fs from 'node:fs';
 import process from 'node:process';
 import os from 'node:os';
 import meow from 'meow';
 import cpy from 'cpy';
+import {isDynamicPattern} from 'globby';
+
+function isDirectory(filePath) {
+	try {
+		return fs.statSync(filePath).isDirectory();
+	} catch {
+		return false;
+	}
+}
 
 const cli = meow(`
 	Usage
@@ -21,12 +31,17 @@ const cli = meow(`
 
 	<source> can contain globs if quoted
 
+	If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
+
 	Examples
 	  Copy all .png files in src folder into dist except src/goat.png
 	  $ cpy 'src/*.png' '!src/goat.png' dist
 
 	  Copy all files inside src folder into dist and preserve path structure
 	  $ cpy . '../dist/' --cwd=src
+
+	  Copy a single file to a specific filename
+	  $ cpy .env.development .env
 
 	  Copy all .png files in the src folder to dist and prefix the image filenames
 	  $ cpy 'src/*.png' dist --cwd=src --rename=hi-{{basename}}
@@ -70,17 +85,36 @@ try {
 	const {rename} = cli.flags;
 	const stringTemplate = '{{basename}}';
 	if (rename?.includes(stringTemplate)) {
-		cli.flags.rename = basename => {
-			const parts = basename.split('.');
-			const fileExtension = parts.length > 1 ? `.${parts.pop()}` : '';
-			const nameWithoutExtension = parts.join('.');
-			return rename.replaceAll(stringTemplate, nameWithoutExtension) + fileExtension;
+		cli.flags.rename = (source, destination) => {
+			destination.name = rename.replaceAll(stringTemplate, source.nameWithoutExtension) + (source.extension ? `.${source.extension}` : '');
 		};
 	}
 
 	const copyFiles = [];
 
-	await cpy(cli.input, cli.input.pop(), {
+	let destination = cli.input.pop();
+	const sourcePatterns = cli.input.filter(pattern => !pattern.startsWith('!'));
+	const hasDestination = typeof destination === 'string';
+	const hasTrailingSeparator = hasDestination && /[\\/]$/.test(destination);
+	const sourcePatternForDynamicCheck = sourcePatterns.length === 1 && process.platform === 'win32' ? sourcePatterns[0].replaceAll('\\', '/') : sourcePatterns[0];
+	const isFileToFileCopy = sourcePatterns.length === 1
+		&& hasDestination
+		&& !isDynamicPattern(sourcePatternForDynamicCheck)
+		&& !isDirectory(path.resolve(cli.flags.cwd, sourcePatterns[0]))
+		&& !hasTrailingSeparator
+		&& !isDirectory(path.resolve(cli.flags.cwd, destination));
+
+	if (isFileToFileCopy) {
+		const destinationFilename = path.basename(destination);
+		cli.flags.rename = (source, destination) => {
+			destination.name = destinationFilename;
+		};
+
+		cli.flags.flat = true;
+		destination = path.dirname(destination);
+	}
+
+	await cpy(cli.input, destination, {
 		cwd: cli.flags.cwd,
 		base: cli.flags.base,
 		rename: cli.flags.rename,
