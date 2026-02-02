@@ -245,6 +245,18 @@ test('dotfiles with extension pattern and --dot flag', async t => {
 	t.is(read(t.context.tmp, 'dest/test.yaml'), 'test');
 });
 
+test('dry run lists files without copying', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'src'));
+	fs.writeFileSync(path.join(t.context.tmp, 'src/hello.js'), 'console.log("hello");');
+
+	const {stdout} = await execa('./cli.js', [path.join(t.context.tmp, 'src/hello.js'), path.join(t.context.tmp, 'dest'), '--dry-run']);
+
+	t.regex(stdout, /hello\.js/);
+	t.true(stdout.includes('→'));
+	t.false(pathExistsSync(path.join(t.context.tmp, 'dest/hello.js')));
+});
+
 test('single file copy to ancestor directory avoids duplication', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'prisma'));

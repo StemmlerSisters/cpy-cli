@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import path from 'node:path';
 import process from 'node:process';
 import os from 'node:os';
 import meow from 'meow';
@@ -15,6 +16,7 @@ const cli = meow(`
 	  --rename=<filename>  Rename all <source> filenames to <filename>. Supports string templates.
 	  --dot                Allow patterns to match entries that begin with a period (.)
 	  --flat               Flatten directory structure. All copied files will be put in the same directory.
+	  --dry-run            List files that would be copied without actually copying
 	  --concurrency        Number of files being copied concurrently
 
 	<source> can contain globs if quoted
@@ -53,6 +55,10 @@ const cli = meow(`
 			type: 'boolean',
 			default: false,
 		},
+		dryRun: {
+			type: 'boolean',
+			default: false,
+		},
 		concurrency: {
 			type: 'number',
 			default: (os.cpus().length > 0 ? os.cpus().length : 1) * 2,
@@ -72,6 +78,8 @@ try {
 		};
 	}
 
+	const copyFiles = [];
+
 	await cpy(cli.input, cli.input.pop(), {
 		cwd: cli.flags.cwd,
 		base: cli.flags.base,
@@ -80,7 +88,19 @@ try {
 		dot: cli.flags.dot,
 		flat: cli.flags.flat,
 		concurrency: cli.flags.concurrency,
+		dryRun: cli.flags.dryRun,
+		onProgress({sourcePath, destinationPath}) {
+			if (cli.flags.dryRun) {
+				copyFiles.push({sourcePath, destinationPath});
+			}
+		},
 	});
+
+	if (cli.flags.dryRun) {
+		for (const {sourcePath, destinationPath} of copyFiles) {
+			console.log(`${path.relative(process.cwd(), sourcePath)} → ${path.relative(process.cwd(), destinationPath)}`);
+		}
+	}
 } catch (error) {
 	if (error.name === 'CpyError') {
 		console.error(error.message);
