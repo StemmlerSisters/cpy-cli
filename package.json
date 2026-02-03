@@ -52,7 +52,7 @@
 		"contents"
 	],
 	"dependencies": {
-		"cpy": "^13.0.0",
+		"cpy": "^13.1.0",
 		"globby": "^14.1.0",
 		"meow": "^14.0.0"
 	},

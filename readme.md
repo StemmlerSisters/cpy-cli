@@ -25,6 +25,7 @@ $ cpy --help
 
   Options
     --no-overwrite       Don't overwrite the destination
+    --update             Only overwrite if the source is newer, or if sizes differ with the same modification time
     --cwd=<dir>          Working directory for files
     --base=<mode>        Base mode for destination paths: cwd or pattern
     --rename=<filename>  Rename all <source> filenames to <filename>. Supports string templates.
@@ -36,6 +37,8 @@ $ cpy --help
   <source> can contain globs if quoted
 
   Errors if no files match, similar to cp.
+
+  --update is ignored when --no-overwrite is set.
 
   If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 
@@ -51,6 +54,9 @@ $ cpy --help
 
     Copy all .png files in the src folder to dist and prefix the image filenames
     $ cpy 'src/*.png' dist --cwd=src --rename=hi-{{basename}}
+
+    Copy only when the source is newer, or if sizes differ with the same modification time
+    $ cpy src dist --update
 ```
 
 ## Related

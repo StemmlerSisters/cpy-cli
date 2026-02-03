@@ -21,6 +21,7 @@ const cli = meow(`
 
 	Options
 	  --no-overwrite       Don't overwrite the destination
+	  --update             Only overwrite if the source is newer, or if sizes differ with the same modification time
 	  --cwd=<dir>          Working directory for files
 	  --base=<mode>        Base mode for destination paths: cwd or pattern
 	  --rename=<filename>  Rename all <source> filenames to <filename>. Supports string templates.
@@ -32,6 +33,8 @@ const cli = meow(`
 	<source> can contain globs if quoted
 
 	Errors if no files match, similar to cp.
+
+	--update is ignored when --no-overwrite is set.
 
 	If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 
@@ -47,12 +50,19 @@ const cli = meow(`
 
 	  Copy all .png files in the src folder to dist and prefix the image filenames
 	  $ cpy 'src/*.png' dist --cwd=src --rename=hi-{{basename}}
+
+	  Copy only when the source is newer, or if sizes differ with the same modification time
+	  $ cpy src dist --update
 `, {
 	importMeta: import.meta,
 	flags: {
 		overwrite: {
 			type: 'boolean',
 			default: true,
+		},
+		update: {
+			type: 'boolean',
+			default: false,
 		},
 		cwd: {
 			type: 'string',
@@ -116,7 +126,17 @@ try {
 		destination = path.dirname(destination);
 	}
 
-	const files = await cpy(cli.input, destination, {
+	const shouldUseUpdate = cli.flags.update && cli.flags.overwrite;
+	let hasMatchedFiles = false;
+	let updateFilter;
+	if (shouldUseUpdate) {
+		updateFilter = () => {
+			hasMatchedFiles = true;
+			return true;
+		};
+	}
+
+	const cpyOptions = {
 		cwd: cli.flags.cwd,
 		base: cli.flags.base,
 		rename: cli.flags.rename,
@@ -124,15 +144,21 @@ try {
 		dot: cli.flags.dot,
 		flat: cli.flags.flat,
 		concurrency: cli.flags.concurrency,
+	};
+
+	const files = await cpy(cli.input, destination, {
+		...cpyOptions,
 		dryRun: cli.flags.dryRun,
+		update: shouldUseUpdate,
+		filter: updateFilter,
 		onProgress({sourcePath, destinationPath}) {
-			if (cli.flags.dryRun) {
+			if (cli.flags.dryRun && sourcePath !== '' && destinationPath !== '') {
 				copyFiles.push({sourcePath, destinationPath});
 			}
 		},
 	});
 
-	if (files.length === 0) {
+	if (files.length === 0 && (!shouldUseUpdate || !hasMatchedFiles)) {
 		console.error('No files matched the given patterns');
 		process.exit(1);
 	}

@@ -145,6 +145,197 @@ test('do not overwrite when --no-overwrite is set', async t => {
 	t.is(read(t.context.tmp, 'dest/hello.js'), 'console.log("world");');
 });
 
+test('update only copies when source is newer or size differs at the same mtime', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+	const destinationPath = path.join(destinationDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'source-old');
+	fs.writeFileSync(destinationPath, 'destination-newer');
+
+	const olderTime = new Date('2020-01-01T00:00:00Z');
+	const newerTime = new Date('2020-01-02T00:00:00Z');
+	fs.utimesSync(sourcePath, olderTime, olderTime);
+	fs.utimesSync(destinationPath, newerTime, newerTime);
+
+	await execa('./cli.js', [sourcePath, destinationDirectory, '--update']);
+
+	t.is(read(destinationDirectory, 'source.txt'), 'destination-newer');
+
+	fs.writeFileSync(sourcePath, 'source-newer');
+	const newestTime = new Date('2020-01-03T00:00:00Z');
+	fs.utimesSync(sourcePath, newestTime, newestTime);
+
+	await execa('./cli.js', [sourcePath, destinationDirectory, '--update']);
+
+	t.is(read(destinationDirectory, 'source.txt'), 'source-newer');
+
+	fs.writeFileSync(sourcePath, 'short');
+	fs.writeFileSync(destinationPath, 'this is longer');
+	const sameTime = new Date('2020-01-04T00:00:00Z');
+	fs.utimesSync(sourcePath, sameTime, sameTime);
+	fs.utimesSync(destinationPath, sameTime, sameTime);
+
+	await execa('./cli.js', [sourcePath, destinationDirectory, '--update']);
+
+	t.is(read(destinationDirectory, 'source.txt'), 'short');
+});
+
+test('update handles overlapping patterns with different destinations', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const sourceDirectory = path.join(temporaryDirectory, 'src');
+	const nestedDirectory = path.join(sourceDirectory, 'nested');
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(nestedDirectory, 'file.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(sourceDirectory);
+	fs.mkdirSync(nestedDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'source');
+
+	const rootDestination = path.join(destinationDirectory, 'file.txt');
+	const nestedDestination = path.join(destinationDirectory, 'nested/file.txt');
+	fs.mkdirSync(path.dirname(nestedDestination), {recursive: true});
+	fs.writeFileSync(rootDestination, 'destination-newer');
+	fs.writeFileSync(nestedDestination, 'destination-older');
+
+	const sourceTime = new Date('2020-01-06T00:00:00Z');
+	const olderTime = new Date('2020-01-05T00:00:00Z');
+	const newerTime = new Date('2020-01-07T00:00:00Z');
+	fs.utimesSync(sourcePath, sourceTime, sourceTime);
+	fs.utimesSync(rootDestination, newerTime, newerTime);
+	fs.utimesSync(nestedDestination, olderTime, olderTime);
+
+	await execa('./cli.js', ['src/nested/file.txt', 'src/**/file.txt', 'dest', '--cwd', temporaryDirectory, '--base', 'pattern', '--update']);
+
+	t.is(read(destinationDirectory, 'file.txt'), 'destination-newer');
+	t.is(read(destinationDirectory, 'nested/file.txt'), 'source');
+});
+
+test('update selects newest when sources collide on destination', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const sourceDirectory = path.join(temporaryDirectory, 'src');
+	const olderDirectory = path.join(sourceDirectory, 'older');
+	const newerDirectory = path.join(sourceDirectory, 'newer');
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(olderDirectory, {recursive: true});
+	fs.mkdirSync(newerDirectory, {recursive: true});
+	fs.mkdirSync(destinationDirectory);
+
+	const olderSource = path.join(olderDirectory, 'file.txt');
+	const newerSource = path.join(newerDirectory, 'file.txt');
+	fs.writeFileSync(olderSource, 'older');
+	fs.writeFileSync(newerSource, 'newer');
+
+	const olderTime = new Date('2020-01-10T00:00:00Z');
+	const newerTime = new Date('2020-01-11T00:00:00Z');
+	fs.utimesSync(olderSource, olderTime, olderTime);
+	fs.utimesSync(newerSource, newerTime, newerTime);
+
+	const {stdout} = await execa('./cli.js', ['src/older/file.txt', 'src/newer/file.txt', 'dest', '--cwd', temporaryDirectory, '--flat', '--update', '--dry-run']);
+
+	const newerOutputPath = path.join('src', 'newer', 'file.txt');
+	const olderOutputPath = path.join('src', 'older', 'file.txt');
+
+	t.true(stdout.includes(newerOutputPath));
+	t.false(stdout.includes(olderOutputPath));
+});
+
+test('update skips when size and modification time are the same', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+	const destinationPath = path.join(destinationDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'same');
+	fs.writeFileSync(destinationPath, 'diff');
+
+	const sameTime = new Date('2020-01-05T00:00:00Z');
+	fs.utimesSync(sourcePath, sameTime, sameTime);
+	fs.utimesSync(destinationPath, sameTime, sameTime);
+
+	await execa('./cli.js', [sourcePath, destinationDirectory, '--update']);
+
+	t.is(read(destinationDirectory, 'source.txt'), 'diff');
+});
+
+test('update copies when destination is missing', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'content');
+
+	await execa('./cli.js', [sourcePath, destinationDirectory, '--update']);
+
+	t.is(read(destinationDirectory, 'source.txt'), 'content');
+});
+
+test('update does not skip destination directory errors', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+	const destinationPath = path.join(destinationDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'content');
+	fs.mkdirSync(destinationPath);
+
+	await t.throwsAsync(
+		execa('./cli.js', [sourcePath, destinationDirectory, '--update']),
+		{message: /EISDIR|EPERM|EACCES|is a directory|illegal operation|operation not permitted|EEXIST/},
+	);
+});
+
+test('update stat errors are reported as copy errors', async t => {
+	if (process.platform === 'win32') {
+		t.pass();
+		return;
+	}
+
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+	const destinationPath = path.join(destinationDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'content');
+	fs.symlinkSync('source.txt', destinationPath);
+
+	await t.throwsAsync(
+		execa('./cli.js', [sourcePath, destinationDirectory, '--update']),
+		{message: /Cannot copy from/},
+	);
+});
+
+test('update is ignored when --no-overwrite is set', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'source');
+	fs.writeFileSync(path.join(destinationDirectory, 'source.txt'), 'destination');
+
+	await t.throwsAsync(
+		execa('./cli.js', [sourcePath, destinationDirectory, '--update', '--no-overwrite']),
+		{message: /EEXIST|already exists/},
+	);
+});
+
 test('do not copy files in the negated glob patterns', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'src'));
@@ -296,6 +487,27 @@ test('dry run lists files without copying', async t => {
 	t.regex(stdout, /hello\.js/);
 	t.true(stdout.includes('→'));
 	t.false(pathExistsSync(path.join(t.context.tmp, 'dest/hello.js')));
+});
+
+test('dry run update with no work produces no output', async t => {
+	const temporaryDirectory = t.context.tmp;
+	const destinationDirectory = path.join(temporaryDirectory, 'dest');
+	const sourcePath = path.join(temporaryDirectory, 'source.txt');
+	const destinationPath = path.join(destinationDirectory, 'source.txt');
+
+	fs.mkdirSync(temporaryDirectory);
+	fs.mkdirSync(destinationDirectory);
+	fs.writeFileSync(sourcePath, 'source-old');
+	fs.writeFileSync(destinationPath, 'destination-newer');
+
+	const olderTime = new Date('2020-01-08T00:00:00Z');
+	const newerTime = new Date('2020-01-09T00:00:00Z');
+	fs.utimesSync(sourcePath, olderTime, olderTime);
+	fs.utimesSync(destinationPath, newerTime, newerTime);
+
+	const {stdout} = await execa('./cli.js', [sourcePath, destinationDirectory, '--update', '--dry-run']);
+
+	t.is(stdout, '');
 });
 
 test('single file to file copy', async t => {
