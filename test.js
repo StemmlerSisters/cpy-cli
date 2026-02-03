@@ -27,6 +27,25 @@ test('source file does not exist', async t => {
 	await t.throwsAsync(execa('./cli.js', [path.join(t.context.tmp, 'nonexistentfile'), t.context.tmp]), {message: /nonexistentfile/});
 });
 
+test('glob pattern matching no files should error', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'src'));
+
+	await t.throwsAsync(
+		execa('./cli.js', ['src/*.js', 'dest', '--cwd', t.context.tmp]),
+		{message: /No files matched/},
+	);
+});
+
+test('glob pattern in nonexistent folder should error', async t => {
+	fs.mkdirSync(t.context.tmp);
+
+	await t.throwsAsync(
+		execa('./cli.js', ['nonexistent/*.js', 'dest', '--cwd', t.context.tmp]),
+		{message: /No files matched/},
+	);
+});
+
 test('cwd', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'cwd'));

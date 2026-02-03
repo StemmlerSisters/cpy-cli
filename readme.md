@@ -30,9 +30,12 @@ $ cpy --help
     --rename=<filename>  Rename all <source> filenames to <filename>. Supports string templates.
     --dot                Allow patterns to match entries that begin with a period (.)
     --flat               Flatten directory structure. All copied files will be put in the same directory.
+    --dry-run            List files that would be copied without actually copying
     --concurrency        Number of files being copied concurrently
 
   <source> can contain globs if quoted
+
+  Errors if no files match, similar to cp.
 
   If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 

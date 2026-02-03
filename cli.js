@@ -31,6 +31,8 @@ const cli = meow(`
 
 	<source> can contain globs if quoted
 
+	Errors if no files match, similar to cp.
+
 	If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 
 	Examples
@@ -114,7 +116,7 @@ try {
 		destination = path.dirname(destination);
 	}
 
-	await cpy(cli.input, destination, {
+	const files = await cpy(cli.input, destination, {
 		cwd: cli.flags.cwd,
 		base: cli.flags.base,
 		rename: cli.flags.rename,
@@ -129,6 +131,11 @@ try {
 			}
 		},
 	});
+
+	if (files.length === 0) {
+		console.error('No files matched the given patterns');
+		process.exit(1);
+	}
 
 	if (cli.flags.dryRun) {
 		for (const {sourcePath, destinationPath} of copyFiles) {
