@@ -71,6 +71,19 @@ test('path structure', async t => {
 	);
 });
 
+test('glob includes extensionless files without matching directories', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'source'));
+	fs.mkdirSync(path.join(t.context.tmp, 'source', 'nested'));
+	fs.writeFileSync(path.join(t.context.tmp, 'source/nested/README'), 'readme');
+	fs.writeFileSync(path.join(t.context.tmp, 'source/nested/file.txt'), 'file');
+
+	await execa('./cli.js', ['**/*', 'dest', '--cwd', path.join(t.context.tmp, 'source')]);
+
+	t.is(read(t.context.tmp, 'source/dest/nested/README'), 'readme');
+	t.is(read(t.context.tmp, 'source/dest/nested/file.txt'), 'file');
+});
+
 test('base option aligns explicit paths with globs', async t => {
 	fs.mkdirSync(t.context.tmp);
 	fs.mkdirSync(path.join(t.context.tmp, 'src'));
