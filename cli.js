@@ -21,6 +21,7 @@ const cli = meow(`
 
 	Options
 	  --no-overwrite       Don't overwrite the destination
+	  --ignore-existing    Skip files that already exist at the destination
 	  --update             Only overwrite if the source is newer, or if sizes differ with the same modification time
 	  --cwd=<dir>          Working directory for files
 	  --base=<mode>        Base mode for destination paths: cwd or pattern
@@ -34,7 +35,7 @@ const cli = meow(`
 
 	Errors if no files match, similar to cp.
 
-	--update is ignored when --no-overwrite is set.
+	--update is ignored when --no-overwrite or --ignore-existing is set.
 
 	If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 
@@ -59,6 +60,10 @@ const cli = meow(`
 		overwrite: {
 			type: 'boolean',
 			default: true,
+		},
+		ignoreExisting: {
+			type: 'boolean',
+			default: false,
 		},
 		update: {
 			type: 'boolean',
@@ -126,11 +131,12 @@ try {
 		destination = path.dirname(destination);
 	}
 
-	const shouldUseUpdate = cli.flags.update && cli.flags.overwrite;
+	const shouldIgnoreExisting = cli.flags.ignoreExisting;
+	const shouldUseUpdate = cli.flags.update && cli.flags.overwrite && !shouldIgnoreExisting;
 	let hasMatchedFiles = false;
-	let updateFilter;
-	if (shouldUseUpdate) {
-		updateFilter = () => {
+	let filter;
+	if (shouldUseUpdate || shouldIgnoreExisting) {
+		filter = () => {
 			hasMatchedFiles = true;
 			return true;
 		};
@@ -141,6 +147,7 @@ try {
 		base: cli.flags.base,
 		rename: cli.flags.rename,
 		overwrite: cli.flags.overwrite,
+		ignoreExisting: shouldIgnoreExisting,
 		dot: cli.flags.dot,
 		flat: cli.flags.flat,
 		concurrency: cli.flags.concurrency,
@@ -150,7 +157,7 @@ try {
 		...cpyOptions,
 		dryRun: cli.flags.dryRun,
 		update: shouldUseUpdate,
-		filter: updateFilter,
+		filter,
 		onProgress({sourcePath, destinationPath}) {
 			if (cli.flags.dryRun && sourcePath !== '' && destinationPath !== '') {
 				copyFiles.push({sourcePath, destinationPath});
@@ -158,7 +165,7 @@ try {
 		},
 	});
 
-	if (files.length === 0 && (!shouldUseUpdate || !hasMatchedFiles)) {
+	if (files.length === 0 && !hasMatchedFiles) {
 		console.error('No files matched the given patterns');
 		process.exit(1);
 	}

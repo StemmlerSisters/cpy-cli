@@ -145,6 +145,17 @@ test('do not overwrite when --no-overwrite is set', async t => {
 	t.is(read(t.context.tmp, 'dest/hello.js'), 'console.log("world");');
 });
 
+test('ignore existing files when --ignore-existing is set', async t => {
+	fs.mkdirSync(t.context.tmp);
+	fs.mkdirSync(path.join(t.context.tmp, 'dest'));
+	fs.writeFileSync(path.join(t.context.tmp, 'hello.js'), 'console.log("hello");');
+	fs.writeFileSync(path.join(t.context.tmp, 'dest/hello.js'), 'console.log("world");');
+
+	await execa('./cli.js', [path.join(t.context.tmp, 'hello.js'), path.join(t.context.tmp, 'dest'), '--ignore-existing']);
+
+	t.is(read(t.context.tmp, 'dest/hello.js'), 'console.log("world");');
+});
+
 test('update only copies when source is newer or size differs at the same mtime', async t => {
 	const temporaryDirectory = t.context.tmp;
 	const destinationDirectory = path.join(temporaryDirectory, 'dest');

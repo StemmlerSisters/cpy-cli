@@ -52,8 +52,8 @@
 		"contents"
 	],
 	"dependencies": {
-		"cpy": "^13.1.0",
-		"globby": "^14.1.0",
+		"cpy": "^13.2.0",
+		"globby": "^16.1.0",
 		"meow": "^14.0.0"
 	},
 	"devDependencies": {

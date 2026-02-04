@@ -25,6 +25,7 @@ $ cpy --help
 
   Options
     --no-overwrite       Don't overwrite the destination
+    --ignore-existing    Skip files that already exist at the destination
     --update             Only overwrite if the source is newer, or if sizes differ with the same modification time
     --cwd=<dir>          Working directory for files
     --base=<mode>        Base mode for destination paths: cwd or pattern
@@ -38,7 +39,7 @@ $ cpy --help
 
   Errors if no files match, similar to cp.
 
-  --update is ignored when --no-overwrite is set.
+  --update is ignored when --no-overwrite or --ignore-existing is set.
 
   If the source is a single file and the destination is not an existing directory, it will be treated as a file-to-file copy (like cp).
 
